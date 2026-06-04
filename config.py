@@ -1,0 +1,15 @@
+CONFIG = {
+    "ollama_base_url": "http://localhost:11434/v1",
+    "chat_model": "gemma4:31b-cloud",
+    "embedding_model": "nomic-embed-text",
+    "data_folder": "data_RAG",
+    "chroma_persist_dir": "./chroma_db",
+    "chroma_system_collection": "system_kb",
+    "chroma_hr_collection": "hr_kb",
+    "chunk_size": 1200,
+    "chunk_overlap": 200,
+    "top_k": 5,
+    "top_k_system": 5,
+    "top_k_hr": 5,
+    "min_score": 0.3,
+}
