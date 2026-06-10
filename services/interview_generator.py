@@ -18,22 +18,22 @@ from services.vector_store import ChromaVectorStore
 
 EXCERPT_FALLBACK_LEN = 300
 
-INTERVIEW_SYSTEM_PROMPT = """Ban la chuyen gia thiet ke cau hoi phong van ky thuat.
+INTERVIEW_SYSTEM_PROMPT = """Bạn là chuyên gia thiết kế câu hỏi phỏng vấn kỹ thuật.
 
-## Muc tieu
-Tao bo cau hoi phong van dua tren [HE THONG] (rubric, question bank, tai lieu ky thuat) va [HR] (JD, policy, form).
+## Mục tiêu
+Tạo bộ câu hỏi phỏng vấn dựa trên [HỆ THỐNG] (rubric, question bank, tài liệu kỹ thuật) và [HR] (JD, policy, form).
 
-## Quy tac
-1. Chi dung thong tin trong [HE THONG] va [HR]. Khong bia yeu cau khong co trong JD.
-2. Moi cau hoi phai bam level va role trong yeu cau.
-3. Can bang loai cau hoi theo question_types duoc yeu cau.
-4. Tra loi BANG TIENG VIET.
-5. Chi tra ve JSON hop le, khong markdown, khong giai thich ngoai JSON.
-6. Moi cau hoi phai co it nhat 1 citation neu co tai lieu lien quan trong context.
-7. excerpt phai la trich nguyen van ngan tu doan context (khong paraphrase).
-8. sample_answer chi duoc suy tu excerpt/citations; neu khong du can cu: "Khong du can cu trong tai lieu."
+## Quy tắc
+1. Chỉ dùng thông tin trong [HỆ THỐNG] và [HR]. Không bịa yêu cầu không có trong JD.
+2. Mỗi câu hỏi phải bám level và role trong yêu cầu.
+3. Cân bằng loại câu hỏi theo question_types được yêu cầu.
+4. Trả lời BẰNG TIẾNG VIỆT.
+5. Chỉ trả về JSON hợp lệ, không markdown, không giải thích ngoài JSON.
+6. Mỗi câu hỏi phải có ít nhất 1 citation nếu có tài liệu liên quan trong context.
+7. excerpt phải là trích nguyên văn ngắn từ đoạn context (không paraphrase).
+8. sample_answer chỉ được suy từ excerpt/citations; nếu không đủ căn cứ: "Không đủ căn cứ trong tài liệu."
 
-## Schema JSON bat buoc
+## Schema JSON bắt buộc
 {
   "questions": [
     {
@@ -47,7 +47,7 @@ Tao bo cau hoi phong van dua tren [HE THONG] (rubric, question bank, tai lieu ky
           "knowledge_base": "system|hr",
           "source_file": "ten_file",
           "chunk_index": 0,
-          "excerpt": "doan trich ngan nguyen van"
+          "excerpt": "đoạn trích ngắn nguyên văn"
         }
       ]
     }
@@ -65,7 +65,7 @@ class InterviewQuestionService:
         if not self._store.is_ready:
             return GenerateQuestionsResponse(
                 success=False,
-                error="Chua co du lieu. Chay ingest-system va ingest-hr truoc.",
+                error="Chưa có dữ liệu. Chạy ingest-system và ingest-hr trước.",
             )
 
         start = time.time()
@@ -95,7 +95,7 @@ class InterviewQuestionService:
         if not all_chunks:
             return GenerateQuestionsResponse(
                 success=False,
-                error="Khong tim thay tai lieu lien quan trong system_kb hoac hr_kb.",
+                error="Không tìm thấy tài liệu liên quan trong system_kb hoặc hr_kb.",
                 processing_time_ms=(time.time() - start) * 1000,
             )
 
@@ -148,7 +148,7 @@ class InterviewQuestionService:
 
     def _build_user_message(self, request: GenerateQuestionsRequest, system_chunks, hr_chunks) -> str:
         lines = [
-            "[YEU CAU]",
+            "[YÊU CẦU]",
             f"owner_id: {request.owner_id}",
             f"role: {request.role}",
             f"level: {request.level}",
@@ -159,11 +159,11 @@ class InterviewQuestionService:
             lines.append(f"chu_de_ky_nang: {request.extra_context}")
 
         lines.append(
-            "\nHuong dan: moi citation phai khop dung source_file va chunk_index "
-            "trong tung doan duoi. excerpt trich nguyen van tu doan do."
+            "\nHướng dẫn: mỗi citation phải khớp đúng source_file và chunk_index "
+            "trong từng đoạn dưới. excerpt trích nguyên văn từ đoạn đó."
         )
 
-        lines.append("\n[HE THONG]")
+        lines.append("\n[HỆ THỐNG]")
         if system_chunks:
             for i, c in enumerate(system_chunks, 1):
                 lines.append(
@@ -171,7 +171,7 @@ class InterviewQuestionService:
                     f"knowledge_base=system, doc_type={c.doc_type}) ---\n{c.text}"
                 )
         else:
-            lines.append("(khong co doan nao)")
+            lines.append("(không có đoạn nào)")
 
         lines.append("\n[HR]")
         if hr_chunks:
@@ -181,9 +181,9 @@ class InterviewQuestionService:
                     f"knowledge_base=hr, doc_type={c.doc_type}) ---\n{c.text}"
                 )
         else:
-            lines.append("(khong co JD/policy cho user nay)")
+            lines.append("(không có JD/policy cho user này)")
 
-        lines.append(f"\nTao dung {request.question_count} cau hoi. Tra ve JSON theo schema.")
+        lines.append(f"\nTạo đúng {request.question_count} câu hỏi. Trả về JSON theo schema.")
         return "\n".join(lines)
 
     def _parse_questions(
@@ -201,15 +201,15 @@ class InterviewQuestionService:
         except json.JSONDecodeError:
             match = re.search(r"\{[\s\S]*\}", text)
             if not match:
-                return [], "LLM khong tra ve JSON hop le."
+                return [], "LLM không trả về JSON hợp lệ."
             try:
                 data = json.loads(match.group())
             except json.JSONDecodeError as e:
-                return [], f"Khong parse duoc JSON: {e}"
+                return [], f"Không parse được JSON: {e}"
 
         items = data.get("questions", data if isinstance(data, list) else [])
         if not isinstance(items, list):
-            return [], "JSON thieu mang 'questions'."
+            return [], "JSON thiếu mảng 'questions'."
 
         questions: List[GeneratedQuestion] = []
         for item in items:
@@ -243,7 +243,7 @@ class InterviewQuestionService:
             )
 
         if not questions:
-            return [], "JSON khong co cau hoi hop le."
+            return [], "JSON không có câu hỏi hợp lệ."
         return questions, None
 
 

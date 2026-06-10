@@ -29,10 +29,19 @@ class IngestResponse:
 
 
 @dataclass
+class ChatMessage:
+    role: str
+    content: str
+    created_at: Optional[str] = None
+
+
+@dataclass
 class ChatRequest:
     question: str
     top_k: int = 5
     owner_id: Optional[str] = None
+    conversation_id: Optional[str] = None
+    chat_history: List[ChatMessage] = field(default_factory=list)
 
 
 @dataclass

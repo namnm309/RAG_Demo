@@ -1,17 +1,17 @@
 """
 RAG Interview Question Generator — Console (Ollama + ChromaDB)
 
-Cach chay:
+Cách chạy:
     python main.py
 
-Lenh:
+Lệnh:
     ingest-system       -> index data_RAG/system -> system_kb
     ingest-hr <id>      -> index data_RAG/hr/<id> -> hr_kb
-    generate            -> sinh cau hoi phong van (dual RAG)
-    status              -> so chunk moi collection
-    clear               -> xoa man hinh
-    quit                -> thoat
-    <cau hoi>           -> chat RAG (co the them owner: <id> | <cau hoi>)
+    generate            -> sinh câu hỏi phỏng vấn (dual RAG)
+    status              -> số chunk mỗi collection
+    clear               -> xóa màn hình
+    quit                -> thoát
+    <câu hỏi>           -> chat RAG (có thể thêm owner: <id> | <câu hỏi>)
 """
 
 import json
@@ -33,7 +33,7 @@ logging.basicConfig(level=logging.WARNING)
 
 
 class IngestProgressBar:
-    def __init__(self, label="Dang xu ly"):
+    def __init__(self, label="Đang xử lý"):
         self._bar = tqdm(
             total=100,
             desc=label,
@@ -64,7 +64,7 @@ def print_separator():
 def print_sources(sources):
     if not sources:
         return
-    print("\nNguon:")
+    print("\nNguồn:")
     for s in sources:
         preview = s.text_preview[:100] + "..." if len(s.text_preview) > 100 else s.text_preview
         kb = getattr(s, "knowledge_base", "system")
@@ -92,7 +92,7 @@ def _print_ingest_result(result):
         if result.files:
             print(f"   Files: {', '.join(result.files)}")
     else:
-        print(f"Loi: {result.message}")
+        print(f"Lỗi: {result.message}")
 
 
 def print_status(store: ChromaVectorStore):
@@ -104,28 +104,28 @@ def print_status(store: ChromaVectorStore):
 
 
 def run_generate_wizard(interview_service: InterviewQuestionService):
-    print("\n--- Sinh cau hoi phong van (dual RAG) ---")
+    print("\n--- Sinh câu hỏi phỏng vấn (dual RAG) ---")
     owner_id = input("owner_id (vd hr_alice): ").strip()
     if not owner_id:
-        print("Can owner_id.\n")
+        print("Cần owner_id.\n")
         return
-    role = input("Vai tro (vd Backend Engineer): ").strip() or "Backend Engineer"
+    role = input("Vai trò (vd Backend Engineer): ").strip() or "Backend Engineer"
     level = input("Level (vd SWE4): ").strip() or "SWE4"
-    count_str = input("So cau hoi (mac dinh 5): ").strip() or "5"
+    count_str = input("Số câu hỏi (mặc định 5): ").strip() or "5"
     try:
         count = int(count_str)
     except ValueError:
         count = 5
-    types_str = input("Loai (technical,behavioral — mac dinh ca hai): ").strip()
+    types_str = input("Loại (technical,behavioral — mặc định cả hai): ").strip()
     if types_str:
         types = [t.strip() for t in types_str.split(",") if t.strip()]
     else:
         types = ["technical", "behavioral"]
-    topic = input("Chu de / ky nang (vd git, system design — Enter de bo qua): ").strip()
-    extra = input("Bo sung khac (Enter de bo qua): ").strip()
+    topic = input("Chủ đề / kỹ năng (vd git, system design — Enter để bỏ qua): ").strip()
+    extra = input("Bổ sung khác (Enter để bỏ qua): ").strip()
     extra_context = ", ".join(p for p in (topic, extra) if p)
 
-    print("\nDang retrieve + sinh cau hoi...")
+    print("\nĐang retrieve + sinh câu hỏi...")
     response = interview_service.generate(
         GenerateQuestionsRequest(
             owner_id=owner_id,
@@ -139,25 +139,25 @@ def run_generate_wizard(interview_service: InterviewQuestionService):
 
     print_separator()
     if not response.success:
-        print(f"Loi: {response.error or 'Khong tao duoc cau hoi'}")
+        print(f"Lỗi: {response.error or 'Không tạo được câu hỏi'}")
         if response.raw_answer:
             print("\nRaw LLM:\n", response.raw_answer[:2000])
     else:
-        print(f"\nDa tao {len(response.questions)} cau hoi ({response.processing_time_ms:.0f}ms):\n")
+        print(f"\nĐã tạo {len(response.questions)} câu hỏi ({response.processing_time_ms:.0f}ms):\n")
         for i, q in enumerate(response.questions, 1):
             print(f"{i}. [{q.question_type}/{q.difficulty}] {q.question}")
-            print(f"   Ly do: {q.rationale}")
+            print(f"   Lý do: {q.rationale}")
             if q.sample_answer:
                 preview = q.sample_answer[:200] + "..." if len(q.sample_answer) > 200 else q.sample_answer
-                print(f"   Tra loi mau: {preview}")
+                print(f"   Trả lời mẫu: {preview}")
             for j, cit in enumerate(q.citations, 1):
                 ex = cit.excerpt[:120] + "..." if len(cit.excerpt) > 120 else cit.excerpt
                 print(
-                    f"   Trich dan {j} [{cit.knowledge_base}] {cit.source_file} "
+                    f"   Trích dẫn {j} [{cit.knowledge_base}] {cit.source_file} "
                     f"chunk #{cit.chunk_index}: \"{ex}\""
                 )
             if q.sources and not q.citations:
-                print(f"   Nguon: {', '.join(q.sources)}")
+                print(f"   Nguồn: {', '.join(q.sources)}")
             print()
         print("JSON:")
         print(json.dumps(response.to_json_dict(), ensure_ascii=False, indent=2))
@@ -180,7 +180,7 @@ def main():
     try:
         client.models.list()
     except Exception:
-        print("Loi: Khong ket noi duoc Ollama. Chay Ollama tai http://localhost:11434")
+        print("Lỗi: Không kết nối được Ollama. Chạy Ollama tại http://localhost:11434")
         sys.exit(1)
 
     vector_store = ChromaVectorStore(
@@ -200,8 +200,8 @@ def main():
     print(f"  Chroma   : {CONFIG['chroma_persist_dir']}")
     print(f"  Data     : {CONFIG['data_folder']}/system | hr/<user_id>")
     print("-" * 60)
-    print("  Lenh: ingest-system | ingest-hr <id> | generate | status")
-    print("        owner:<id> | <cau hoi>  (chat co HR context)")
+    print("  Lệnh: ingest-system | ingest-hr <id> | generate | status")
+    print("        owner:<id> | <câu hỏi>  (chat có HR context)")
     print("        clear | quit")
     print("=" * 60)
 
@@ -211,9 +211,9 @@ def main():
     print()
     while True:
         try:
-            user_input = input("Ban: ").strip()
+            user_input = input("Bạn: ").strip()
         except (KeyboardInterrupt, EOFError):
-            print("\nTam biet!")
+            print("\nTạm biệt!")
             break
 
         if not user_input:
@@ -221,7 +221,7 @@ def main():
 
         low = user_input.lower()
         if low in ("quit", "exit", "q"):
-            print("Tam biet!")
+            print("Tạm biệt!")
             break
         if low == "clear":
             os.system("cls" if os.name == "nt" else "clear")
@@ -232,7 +232,7 @@ def main():
             continue
         if low == "generate":
             if not vector_store.is_ready:
-                print("Chua co du lieu. Chay ingest-system truoc.\n")
+                print("Chưa có dữ liệu. Chạy ingest-system trước.\n")
                 continue
             run_generate_wizard(interview_service)
             continue
@@ -243,21 +243,21 @@ def main():
         if low.startswith("ingest-hr"):
             parts = user_input.split(maxsplit=1)
             if len(parts) < 2:
-                print("Dung: ingest-hr <user_id>\n")
+                print("Dùng: ingest-hr <user_id>\n")
                 continue
             do_ingest_hr(ingestion_service, parts[1].strip())
             print()
             continue
         if low == "ingest":
-            print("Lenh 'ingest' da thay bang 'ingest-system' va 'ingest-hr <user_id>'.\n")
+            print("Lệnh 'ingest' đã thay bằng 'ingest-system' và 'ingest-hr <user_id>'.\n")
             continue
 
         if not vector_store.is_ready:
-            print("Chua co du lieu. Chay ingest-system truoc.\n")
+            print("Chưa có dữ liệu. Chạy ingest-system trước.\n")
             continue
 
         chat_req = parse_chat_input(user_input)
-        print("\nDang tim kiem va tra loi...")
+        print("\nĐang tìm kiếm và trả lời...")
         response = rag_service.ask(chat_req)
 
         print_separator()

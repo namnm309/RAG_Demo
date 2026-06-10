@@ -48,7 +48,7 @@ class DocumentIngestionService:
         progress_callback: Optional[Callable[[str, float], None]] = None,
     ) -> IngestResponse:
         if not owner_id or not owner_id.strip():
-            return IngestResponse(success=False, message="owner_id khong hop le.")
+            return IngestResponse(success=False, message="owner_id không hợp lệ.")
         owner_id = owner_id.strip()
         base = self._config.get("data_folder", "data_RAG")
         folder = folder_path or os.path.join(os.getcwd(), base, "hr", owner_id)
@@ -68,7 +68,7 @@ class DocumentIngestionService:
         if total > 0:
             print(f"ChromaDB: system_kb={system_count} chunks, hr_kb={hr_count} chunks.")
         else:
-            print("Chua co du lieu. Dung 'ingest-system' hoac 'ingest-hr <user_id>'.")
+            print("Chưa có dữ liệu. Dùng 'ingest-system' hoặc 'ingest-hr <user_id>'.")
         return total
 
     def _ingest_collection(
@@ -84,16 +84,16 @@ class DocumentIngestionService:
             os.makedirs(folder, exist_ok=True)
             return IngestResponse(
                 success=False,
-                message=f"Da tao folder '{folder}'. Cho file vao va goi lai.",
+                message=f"Đã tạo folder '{folder}'. Cho file vào và gọi lại.",
             )
 
         chunk_size = self._config.get("chunk_size", 1200)
         overlap = self._config.get("chunk_overlap", 200)
         embed_model = self._config.get("embedding_model", "nomic-embed-text")
 
-        self._emit_progress(progress_callback, f"Xoa du lieu cu trong {clear_message}...", 0.0)
+        self._emit_progress(progress_callback, f"Xóa dữ liệu cũ trong {clear_message}...", 0.0)
         deleted = self._store.delete_scoped(collection, owner_id=owner_id)
-        self._emit_progress(progress_callback, f"Da xoa {deleted} ban ghi cu.", 0.02)
+        self._emit_progress(progress_callback, f"Đã xóa {deleted} bản ghi cũ.", 0.02)
 
         files = [
             str(p)
@@ -101,9 +101,9 @@ class DocumentIngestionService:
             if p.suffix.lower() in SUPPORTED_EXTENSIONS
         ]
         if not files:
-            return IngestResponse(success=False, message=f"Khong tim thay file nao trong '{folder}'.")
+            return IngestResponse(success=False, message=f"Không tìm thấy file nào trong '{folder}'.")
 
-        self._emit_progress(progress_callback, f"Tim thay {len(files)} file, bat dau ingestion...", 0.05)
+        self._emit_progress(progress_callback, f"Tìm thấy {len(files)} file, bắt đầu ingestion...", 0.05)
         total_chunks = 0
 
         for file_index, file_path in enumerate(files, start=1):
@@ -112,7 +112,7 @@ class DocumentIngestionService:
                 base_progress = (file_index - 1) / len(files)
                 self._emit_progress(
                     progress_callback,
-                    f"[{file_index}/{len(files)}] Dang doc: {fname}",
+                    f"[{file_index}/{len(files)}] Đang đọc: {fname}",
                     base_progress,
                 )
 
@@ -160,14 +160,14 @@ class DocumentIngestionService:
                 logger.exception("Ingest error %s", file_path)
                 self._emit_progress(
                     progress_callback,
-                    f"[!] Loi: {os.path.basename(file_path)}: {e}",
+                    f"[!] Lỗi: {os.path.basename(file_path)}: {e}",
                     file_index / len(files),
                 )
 
         self._emit_progress(progress_callback, f"Xong. {total_chunks} chunks trong {clear_message}.", 1.0)
         return IngestResponse(
             success=True,
-            message=f"Index thanh cong {len(files)} file voi {total_chunks} chunks ({clear_message}).",
+            message=f"Index thành công {len(files)} file với {total_chunks} chunks ({clear_message}).",
             documents_loaded=len(files),
             chunks_created=total_chunks,
             files=[os.path.basename(f) for f in files],
@@ -216,7 +216,7 @@ class DocumentIngestionService:
         try:
             from openpyxl import load_workbook
         except ImportError as exc:
-            raise RuntimeError("Can cai openpyxl. Chay: pip install -r requirements.txt") from exc
+            raise RuntimeError("Cần cài openpyxl. Chạy: pip install -r requirements.txt") from exc
 
         workbook = load_workbook(file_path, data_only=True, read_only=True)
         lines: List[str] = []
@@ -234,7 +234,7 @@ class DocumentIngestionService:
         try:
             import xlrd
         except ImportError as exc:
-            raise RuntimeError("Can cai xlrd. Chay: pip install -r requirements.txt") from exc
+            raise RuntimeError("Cần cài xlrd. Chạy: pip install -r requirements.txt") from exc
 
         workbook = xlrd.open_workbook(file_path)
         lines: List[str] = []

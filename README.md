@@ -24,8 +24,8 @@ python main.py
 
 **nhớ lệnh**
 - `ingest-system` — nạp folder system (xóa system cũ rồi index lại)
-- `ingest-hr hr_alice` — nạp JD alice, ko đụng bob/system
-- `status` — coi có chunk chưa
+- `ingest-hr hr_alice` — nạp JD alice, không đụng bob/system
+- `status` — xem có chunk chưa
 - `generate` — ra JSON câu hỏi ← **cái chính**
 - `owner:hr_alice | ...` — chat thử
 
@@ -36,7 +36,7 @@ thêm/sửa file → ingest lại
 **generate cho đúng**
 1. ingest-system (+ ingest-hr nếu cần JD)
 2. `generate` → nhập owner, role, level
-3. **chủ đề** (vd `git`) — ko nhập thì hay chỉ lấy rubric SWE4
+3. **chủ đề** (vd `git`) — không nhập thì hay chỉ lấy rubric SWE4
 4. cuối có JSON: `citations`, `sample_answer`
 
 ⚠ chat ≠ generate. muốn bộ câu hỏi → `generate`, đừng chat "tạo câu hỏi git"
@@ -45,8 +45,8 @@ thêm/sửa file → ingest lại
 
 **dính lỗi**
 - 0 chunk → file sai folder (phải trong `system/` hoặc `hr/<id>/`)
-- ko thấy pro git → ingest-system + generate + chủ đề `git`
-- hr ko có jd → `ingest-hr` + owner_id trùng tên folder
+- không thấy pro git → ingest-system + generate + chủ đề `git`
+- hr không có jd → `ingest-hr` + owner_id trùng tên folder
 - retrieve ít → hạ `min_score` config (0.2)
 
 db: `chroma_db/` | `rag_cache/` = đợt cũ, bỏ qua

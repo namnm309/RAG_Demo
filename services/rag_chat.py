@@ -4,7 +4,7 @@ from typing import List
 from openai import OpenAI
 
 from helpers.embeddings import embed_text
-from models.schemas import ChatRequest, ChatResponse, SourceReference
+from models.schemas import ChatMessage, ChatRequest, ChatResponse, SourceReference
 from services.vector_store import ChromaVectorStore
 
 SYSTEM_PROMPT = """Bạn là trợ lý hỏi đáp tài liệu sử dụng RAG.
@@ -31,6 +31,25 @@ Trả lời chính xác câu hỏi của người dùng chỉ dựa trên nội 
 - Nếu các đoạn mâu thuẫn nhau, nêu rõ mâu thuẫn và dẫn nguồn tương ứng.
 - Không đề cập đến độ liên quan hoặc score trong câu trả lời."""
 
+_MAX_HISTORY_MESSAGES = 6
+_MAX_HISTORY_CONTENT_LEN = 1000
+
+
+def _format_chat_history(chat_history: List[ChatMessage]) -> str:
+    valid = [
+        msg
+        for msg in chat_history
+        if msg.role in ("user", "assistant") and msg.content.strip()
+    ]
+    recent = valid[-_MAX_HISTORY_MESSAGES:]
+    lines = []
+    for msg in recent:
+        content = msg.content.strip()
+        if len(content) > _MAX_HISTORY_CONTENT_LEN:
+            content = content[:_MAX_HISTORY_CONTENT_LEN]
+        lines.append(f"{msg.role}: {content}")
+    return "\n".join(lines)
+
 
 class RagChatService:
     def __init__(self, vector_store: ChromaVectorStore, client: OpenAI, config: dict):
@@ -40,7 +59,7 @@ class RagChatService:
 
     def ask(self, request: ChatRequest) -> ChatResponse:
         if not self._store.is_ready:
-            return ChatResponse(answer="Chua co du lieu. Dung ingest-system hoac ingest-hr truoc.")
+            return ChatResponse(answer="Chưa có dữ liệu. Dùng ingest-system hoặc ingest-hr trước.")
 
         start = time.time()
         top_k = request.top_k if request.top_k > 0 else self._config.get("top_k", 5)
@@ -71,18 +90,27 @@ class RagChatService:
 
         if not chunks:
             return ChatResponse(
-                answer="Khong tim thay thong tin lien quan trong tai lieu.",
+                answer="Không tìm thấy thông tin liên quan trong tài liệu.",
                 processing_time_ms=(time.time() - start) * 1000,
             )
 
-        context_parts = ["[NGU CANH]"]
+        context_parts = ["[NGỮ CẢNH]"]
         for i, c in enumerate(chunks):
-            kb_label = "HE THONG" if c.knowledge_base == "system" else "HR"
+            kb_label = "HỆ THỐNG" if c.knowledge_base == "system" else "HR"
             context_parts.append(
-                f"--- Doan {i+1} ({kb_label}, tu: {c.source_file}, chunk #{c.chunk_index}) ---\n{c.text}"
+                f"--- Đoạn {i+1} ({kb_label}, từ: {c.source_file}, chunk #{c.chunk_index}) ---\n{c.text}"
             )
         context = "\n\n".join(context_parts)
-        user_message = f"{context}\n[HET NGU CANH]\n\n[CAU HOI]\n{request.question}"
+
+        history_text = _format_chat_history(request.chat_history)
+        if history_text:
+            user_message = (
+                f"[LỊCH SỬ HỘI THOẠI]\n{history_text}\n[HẾT LỊCH SỬ HỘI THOẠI]\n\n"
+                "Chỉ dùng lịch sử trên để hiểu câu hỏi nối tiếp. Không dùng lịch sử để trả lời.\n\n"
+                f"{context}\n[HẾT NGỮ CẢNH]\n\n[CÂU HỎI]\n{request.question}"
+            )
+        else:
+            user_message = f"{context}\n[HẾT NGỮ CẢNH]\n\n[CÂU HỎI]\n{request.question}"
 
         stream = self._client.chat.completions.create(
             model=self._config.get("chat_model", "gemma4:31b-cloud"),
@@ -97,7 +125,7 @@ class RagChatService:
             delta = chunk.choices[0].delta.content or ""
             if delta:
                 answer_parts.append(delta)
-        answer = "".join(answer_parts) or "Khong nhan duoc phan hoi tu LLM."
+        answer = "".join(answer_parts) or "Không nhận được phản hồi từ LLM."
 
         sources: List[SourceReference] = [
             SourceReference(
