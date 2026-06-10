@@ -12,6 +12,7 @@ try {
 
 Write-Host "Khoi dong RAG API tai http://localhost:8000 ..." -ForegroundColor Cyan
 Write-Host "Health: http://localhost:8000/health" -ForegroundColor Yellow
+Write-Host "Swagger: http://localhost:8000/api/v1/docs" -ForegroundColor Yellow
 Write-Host "Nhan Ctrl+C de dung" -ForegroundColor Gray
 
-python -m uvicorn api:app --host 0.0.0.0 --port 8000
+python -m uvicorn api.app:app --host 0.0.0.0 --port 8000

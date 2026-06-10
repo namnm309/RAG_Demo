@@ -9,7 +9,7 @@ RAG + Ollama + Chroma → sinh câu hỏi PV có **trích dẫn doc** + **đáp 
 | Mode | Command |
 |------|---------|
 | Console dev/test | `python main.py` |
-| FastAPI local | `.\run-local.ps1` hoặc `python -m uvicorn api:app --host 0.0.0.0 --port 8000` |
+| FastAPI local | `.\run-local.ps1` hoặc `python -m uvicorn api.app:app --host 0.0.0.0 --port 8000` |
 | Docker trên PC | `docker compose up -d --build` (cần Docker Desktop) |
 
 Chạy local không Docker: [DEPLOYMENT_LOCAL.md](DEPLOYMENT_LOCAL.md).  
@@ -54,7 +54,7 @@ thêm/sửa file → ingest lại
 3. xác nhận plan (`y` hoặc `edit`)
 4. nhận JSON câu hỏi: `citations`, `sample_answer`
 
-API: `POST /generate-plan` (action: `start` | `message` | `confirm`) rồi `POST /generate-questions` với `confirmed_plan`.
+API v1: Swagger tại `/api/v1/docs`. Plan: `POST /api/v1/interview-plans/start|messages|confirm` → `POST /api/v1/interview-questions`. Xem [docs/API_V1.md](docs/API_V1.md).
 
 ⚠ chat ≠ generate. muốn bộ câu hỏi → `generate-plan`, đừng chat "tạo câu hỏi git"
 

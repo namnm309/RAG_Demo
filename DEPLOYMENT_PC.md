@@ -170,21 +170,37 @@ Backend gọi RAG với header `X-Internal-Api-Key`. RAG service **không** lưu
 | Mode | Command |
 |------|---------|
 | Console dev/test | `python main.py` |
-| FastAPI local | `uvicorn api:app --host 0.0.0.0 --port 8000` |
+| FastAPI local | `uvicorn api.app:app --host 0.0.0.0 --port 8000` |
 | Docker trên PC | `docker compose up -d --build` |
 
 ---
 
-## API endpoints
+## API v1 (khuyến nghị)
+
+Swagger: http://localhost:8000/api/v1/docs — Contract: [docs/API_V1.md](docs/API_V1.md)
 
 | Method | Path | Auth | Mô tả |
 |--------|------|------|-------|
-| GET | `/health` | Không | Health check + Ollama ping |
-| GET | `/status` | API key | Chunk counts + indexed files |
-| POST | `/chat` | API key | RAG chat |
-| POST | `/generate-plan` | API key | Lập plan PV (start / message / confirm) |
-| POST | `/generate-questions` | API key | Sinh câu hỏi (dùng `confirmed_plan` hoặc one-shot) |
-| POST | `/ingest/system` | API key | Upload file multipart (`files`) → index system KB (incremental) |
-| POST | `/ingest/hr/{owner_id}` | API key | Upload file multipart (`files`) → index HR KB theo owner (incremental) |
+| GET | `/api/v1/health` | Không | Health + Ollama |
+| GET | `/api/v1/status` | API key | Chunk counts + files |
+| POST | `/api/v1/knowledge/system/files` | API key | Upload system docs |
+| POST | `/api/v1/knowledge/hr/{owner_id}/files` | API key | Upload JD (validate) |
+| POST | `/api/v1/chat` | API key | RAG chat |
+| POST | `/api/v1/interview-plans/start` | API key | Bắt đầu plan |
+| POST | `/api/v1/interview-plans/messages` | API key | Clarify plan |
+| POST | `/api/v1/interview-plans/confirm` | API key | Xác nhận plan |
+| POST | `/api/v1/interview-questions` | API key | Sinh câu hỏi |
+
+`GET /health` (root) giữ cho Docker probe.
+
+## Legacy endpoints (deprecated, sunset 2026-09-01)
+
+| Method | Path | Thay bằng v1 |
+|--------|------|----------------|
+| POST | `/ingest/system` | `/api/v1/knowledge/system/files` |
+| POST | `/ingest/hr/{owner_id}` | `/api/v1/knowledge/hr/{owner_id}/files` |
+| POST | `/chat` | `/api/v1/chat` |
+| POST | `/generate-plan` | `/api/v1/interview-plans/*` |
+| POST | `/generate-questions` | `/api/v1/interview-questions` |
 
 Auth header: `X-Internal-Api-Key: {INTERNAL_API_KEY}` (bỏ qua nếu `INTERNAL_API_KEY` rỗng).

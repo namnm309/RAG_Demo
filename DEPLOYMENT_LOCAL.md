@@ -27,7 +27,7 @@ File `.env` đã cấu hình cho local:
 ```powershell
 cd E:\Github\RagChatbotPython
 pip install -r requirements.txt
-python -m uvicorn api:app --host 0.0.0.0 --port 8000
+python -m uvicorn api.app:app --host 0.0.0.0 --port 8000
 ```
 
 Hoặc dùng script:
@@ -38,8 +38,13 @@ Hoặc dùng script:
 
 ## Bước 4 — Test
 
+**Swagger UI:** http://localhost:8000/api/v1/docs
+
+**API v1** (khuyến nghị): prefix `/api/v1`, response envelope `{ success, data, error, meta }`. Chi tiết: [docs/API_V1.md](docs/API_V1.md).
+
 ```powershell
 curl http://localhost:8000/health
+curl http://localhost:8000/api/v1/health
 
 # Ingest system — multipart, field "files" (có thể gửi nhiều file)
 curl -X POST http://localhost:8000/ingest/system `
