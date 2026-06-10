@@ -40,4 +40,11 @@ CONFIG = {
     "max_history_messages": _env_int("MAX_HISTORY_MESSAGES", 6),
     "max_history_message_chars": _env_int("MAX_HISTORY_MESSAGE_CHARS", 1000),
     "internal_api_key": _env_str("INTERNAL_API_KEY", ""),
+    "max_upload_files": _env_int("MAX_UPLOAD_FILES", 20),
+    "max_upload_size_mb": _env_int("MAX_UPLOAD_SIZE_MB", 25),
+    "max_plan_turns": _env_int("MAX_PLAN_TURNS", 5),
+    "jd_min_chars": _env_int("JD_MIN_CHARS", 400),
+    "jd_max_chars": _env_int("JD_MAX_CHARS", 30_000),
+    "jd_min_words": _env_int("JD_MIN_WORDS", 80),
+    "jd_max_words": _env_int("JD_MAX_WORDS", 5_000),
 }

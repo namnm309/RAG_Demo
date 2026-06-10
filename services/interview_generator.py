@@ -11,6 +11,7 @@ from models.schemas import (
     GeneratedQuestion,
     GenerateQuestionsRequest,
     GenerateQuestionsResponse,
+    InterviewPlan,
     QuestionCitation,
     SourceReference,
 )
@@ -61,7 +62,48 @@ class InterviewQuestionService:
         self._client = client
         self._config = config
 
+    def generate_from_plan(self, plan: InterviewPlan) -> GenerateQuestionsResponse:
+        return self.generate(
+            GenerateQuestionsRequest(
+                owner_id=plan.owner_id,
+                role=plan.role,
+                level=plan.level,
+                question_count=plan.question_count,
+                question_types=plan.question_types,
+                extra_context=self._plan_extra_context(plan),
+                confirmed_plan=plan,
+            )
+        )
+
+    @staticmethod
+    def _plan_extra_context(plan: InterviewPlan) -> str:
+        parts = list(plan.topics)
+        if plan.constraints:
+            parts.append(plan.constraints)
+        if plan.notes:
+            parts.append(plan.notes)
+        return ", ".join(p for p in parts if p)
+
     def generate(self, request: GenerateQuestionsRequest) -> GenerateQuestionsResponse:
+        if request.confirmed_plan:
+            plan = request.confirmed_plan
+            request = GenerateQuestionsRequest(
+                owner_id=plan.owner_id,
+                role=plan.role,
+                level=plan.level,
+                question_count=plan.question_count,
+                question_types=plan.question_types,
+                extra_context=self._plan_extra_context(plan),
+                top_k_system=request.top_k_system,
+                top_k_hr=request.top_k_hr,
+                confirmed_plan=plan,
+            )
+        elif not request.owner_id or not request.role or not request.level:
+            return GenerateQuestionsResponse(
+                success=False,
+                error="Thiếu owner_id/role/level hoặc confirmed_plan.",
+            )
+
         if not self._store.is_ready:
             return GenerateQuestionsResponse(
                 success=False,
@@ -157,6 +199,8 @@ class InterviewQuestionService:
         ]
         if request.extra_context:
             lines.append(f"chu_de_ky_nang: {request.extra_context}")
+        if request.confirmed_plan and request.confirmed_plan.summary:
+            lines.append(f"tom_tat_plan: {request.confirmed_plan.summary}")
 
         lines.append(
             "\nHướng dẫn: mỗi citation phải khớp đúng source_file và chunk_index "

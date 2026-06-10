@@ -7,7 +7,8 @@ Cách chạy:
 Lệnh:
     ingest-system       -> index data_RAG/system -> system_kb
     ingest-hr <id>      -> index data_RAG/hr/<id> -> hr_kb
-    generate            -> sinh câu hỏi phỏng vấn (dual RAG)
+    generate-plan       -> lập plan + xác nhận HR rồi sinh câu hỏi (luồng chính)
+    generate            -> sinh câu hỏi một bước (dev/test)
     status              -> số chunk mỗi collection
     clear               -> xóa màn hình
     quit                -> thoát
@@ -23,9 +24,10 @@ from openai import OpenAI
 from tqdm import tqdm
 
 from config import CONFIG
-from models.schemas import ChatRequest, GenerateQuestionsRequest
+from models.schemas import ChatMessage, ChatRequest, GeneratePlanRequest, GenerateQuestionsRequest
 from services.ingestion import DocumentIngestionService
 from services.interview_generator import InterviewQuestionService
+from services.interview_plan import InterviewPlanService
 from services.rag_chat import RagChatService
 from services.vector_store import ChromaVectorStore
 
@@ -93,6 +95,11 @@ def _print_ingest_result(result):
             print(f"   Files: {', '.join(result.files)}")
     else:
         print(f"Lỗi: {result.message}")
+    for fr in result.file_results:
+        if not fr.success:
+            print(f"   - {fr.file_name}: {fr.message}")
+            for err in fr.validation_errors:
+                print(f"     * {err}")
 
 
 def print_status(store: ChromaVectorStore):
@@ -101,6 +108,135 @@ def print_status(store: ChromaVectorStore):
     sys_files = store.indexed_files("system")
     if sys_files:
         print(f"  System files: {', '.join(sys_files[:5])}{'...' if len(sys_files) > 5 else ''}")
+
+
+def _print_generated_questions(response):
+    print_separator()
+    if not response.success:
+        print(f"Lỗi: {response.error or 'Không tạo được câu hỏi'}")
+        if response.raw_answer:
+            print("\nRaw LLM:\n", response.raw_answer[:2000])
+    else:
+        print(f"\nĐã tạo {len(response.questions)} câu hỏi ({response.processing_time_ms:.0f}ms):\n")
+        for i, q in enumerate(response.questions, 1):
+            print(f"{i}. [{q.question_type}/{q.difficulty}] {q.question}")
+            print(f"   Lý do: {q.rationale}")
+            if q.sample_answer:
+                preview = q.sample_answer[:200] + "..." if len(q.sample_answer) > 200 else q.sample_answer
+                print(f"   Trả lời mẫu: {preview}")
+            for j, cit in enumerate(q.citations, 1):
+                ex = cit.excerpt[:120] + "..." if len(cit.excerpt) > 120 else cit.excerpt
+                print(
+                    f"   Trích dẫn {j} [{cit.knowledge_base}] {cit.source_file} "
+                    f"chunk #{cit.chunk_index}: \"{ex}\""
+                )
+            if q.sources and not q.citations:
+                print(f"   Nguồn: {', '.join(q.sources)}")
+            print()
+        print("JSON:")
+        print(json.dumps(response.to_json_dict(), ensure_ascii=False, indent=2))
+    print_sources(response.sources)
+    print_separator()
+    print()
+
+
+def run_generate_plan_wizard(plan_service: InterviewPlanService, interview_service: InterviewQuestionService):
+    print("\n--- Lập plan phỏng vấn (JD → clarify → xác nhận → sinh câu hỏi) ---")
+    owner_id = input("owner_id (vd hr_alice): ").strip()
+    if not owner_id:
+        print("Cần owner_id.\n")
+        return
+
+    chat_history: list[ChatMessage] = []
+    print("\nĐang phân tích JD...")
+    plan_response = plan_service.handle(
+        GeneratePlanRequest(action="start", owner_id=owner_id, chat_history=[])
+    )
+
+    if not plan_response.success and plan_response.phase == "jd_invalid":
+        print(f"Lỗi JD: {plan_response.error}")
+        for err in plan_response.validation_errors:
+            print(f"  - {err}")
+        print()
+        return
+
+    while plan_response.phase == "clarifying":
+        print(f"\nHệ thống: {plan_response.assistant_message}")
+        if plan_response.clarifying_questions:
+            print("\nCâu hỏi cần trả lời:")
+            for i, q in enumerate(plan_response.clarifying_questions, 1):
+                print(f"  {i}. {q}")
+        reply = input("\nHR: ").strip()
+        if not reply:
+            print("Cần phản hồi để tiếp tục.\n")
+            return
+        chat_history.append(ChatMessage(role="assistant", content=plan_response.assistant_message))
+        chat_history.append(ChatMessage(role="user", content=reply))
+        plan_response = plan_service.handle(
+            GeneratePlanRequest(
+                action="message",
+                owner_id=owner_id,
+                message=reply,
+                chat_history=chat_history,
+            )
+        )
+        if not plan_response.success:
+            print(f"Lỗi: {plan_response.error}\n")
+            return
+
+    if plan_response.phase != "plan_proposed" or not plan_response.plan:
+        print(f"Không tạo được plan: {plan_response.error or plan_response.assistant_message}\n")
+        return
+
+    plan = plan_response.plan
+    while True:
+        print("\n--- Plan đề xuất ---")
+        print(f"  Role   : {plan.role}")
+        print(f"  Level  : {plan.level}")
+        print(f"  Số câu : {plan.question_count}")
+        print(f"  Loại   : {', '.join(plan.question_types)}")
+        print(f"  Chủ đề : {', '.join(plan.topics) or '(chưa có)'}")
+        print(f"  Tóm tắt: {plan.summary}")
+        if plan.constraints:
+            print(f"  Ràng buộc: {plan.constraints}")
+        confirm = input("\nXác nhận plan? (y/n/edit): ").strip().lower()
+        if confirm == "y":
+            break
+        if confirm == "edit":
+            plan.role = input(f"Role [{plan.role}]: ").strip() or plan.role
+            plan.level = input(f"Level [{plan.level}]: ").strip() or plan.level
+            count_str = input(f"Số câu [{plan.question_count}]: ").strip()
+            if count_str:
+                try:
+                    plan.question_count = int(count_str)
+                except ValueError:
+                    pass
+            types_str = input(f"Loại [{','.join(plan.question_types)}]: ").strip()
+            if types_str:
+                plan.question_types = [t.strip() for t in types_str.split(",") if t.strip()]
+            topics_str = input(f"Chủ đề [{','.join(plan.topics)}]: ").strip()
+            if topics_str:
+                plan.topics = [t.strip() for t in topics_str.split(",") if t.strip()]
+            continue
+        print("Đã hủy.\n")
+        return
+
+    confirmed = plan_service.handle(
+        GeneratePlanRequest(
+            action="confirm",
+            owner_id=owner_id,
+            plan_draft=plan,
+            chat_history=chat_history,
+        )
+    )
+    if not confirmed.success or not confirmed.plan:
+        print(f"Lỗi xác nhận: {confirmed.error}\n")
+        return
+
+    print(f"\n{confirmed.assistant_message}")
+    print("\nĐang sinh câu hỏi theo plan đã xác nhận...")
+    response = interview_service.generate_from_plan(confirmed.plan)
+    _print_generated_questions(response)
 
 
 def run_generate_wizard(interview_service: InterviewQuestionService):
@@ -137,33 +273,7 @@ def run_generate_wizard(interview_service: InterviewQuestionService):
         )
     )
 
-    print_separator()
-    if not response.success:
-        print(f"Lỗi: {response.error or 'Không tạo được câu hỏi'}")
-        if response.raw_answer:
-            print("\nRaw LLM:\n", response.raw_answer[:2000])
-    else:
-        print(f"\nĐã tạo {len(response.questions)} câu hỏi ({response.processing_time_ms:.0f}ms):\n")
-        for i, q in enumerate(response.questions, 1):
-            print(f"{i}. [{q.question_type}/{q.difficulty}] {q.question}")
-            print(f"   Lý do: {q.rationale}")
-            if q.sample_answer:
-                preview = q.sample_answer[:200] + "..." if len(q.sample_answer) > 200 else q.sample_answer
-                print(f"   Trả lời mẫu: {preview}")
-            for j, cit in enumerate(q.citations, 1):
-                ex = cit.excerpt[:120] + "..." if len(cit.excerpt) > 120 else cit.excerpt
-                print(
-                    f"   Trích dẫn {j} [{cit.knowledge_base}] {cit.source_file} "
-                    f"chunk #{cit.chunk_index}: \"{ex}\""
-                )
-            if q.sources and not q.citations:
-                print(f"   Nguồn: {', '.join(q.sources)}")
-            print()
-        print("JSON:")
-        print(json.dumps(response.to_json_dict(), ensure_ascii=False, indent=2))
-    print_sources(response.sources)
-    print_separator()
-    print()
+    _print_generated_questions(response)
 
 
 def parse_chat_input(user_input: str) -> ChatRequest:
@@ -191,6 +301,7 @@ def main():
     ingestion_service = DocumentIngestionService(vector_store, client, CONFIG)
     rag_service = RagChatService(vector_store, client, CONFIG)
     interview_service = InterviewQuestionService(vector_store, client, CONFIG)
+    plan_service = InterviewPlanService(vector_store, ingestion_service, client, CONFIG)
 
     print("\n" + "=" * 60)
     print("  Interview RAG  (Ollama + ChromaDB)")
@@ -200,7 +311,7 @@ def main():
     print(f"  Chroma   : {CONFIG['chroma_persist_dir']}")
     print(f"  Data     : {CONFIG['data_folder']}/system | hr/<user_id>")
     print("-" * 60)
-    print("  Lệnh: ingest-system | ingest-hr <id> | generate | status")
+    print("  Lệnh: ingest-system | ingest-hr <id> | generate-plan | generate | status")
     print("        owner:<id> | <câu hỏi>  (chat có HR context)")
     print("        clear | quit")
     print("=" * 60)
@@ -229,6 +340,12 @@ def main():
         if low == "status":
             print_status(vector_store)
             print()
+            continue
+        if low == "generate-plan":
+            if not vector_store.is_ready:
+                print("Chưa có dữ liệu. Chạy ingest-system và ingest-hr trước.\n")
+                continue
+            run_generate_plan_wizard(plan_service, interview_service)
             continue
         if low == "generate":
             if not vector_store.is_ready:

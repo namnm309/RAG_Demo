@@ -56,10 +56,16 @@ curl http://localhost:8000/health
 
 ## F. Ingest system
 
+`multipart/form-data`, field `files` (1+ file). Incremental: chỉ thay chunk của từng file gửi lên.
+
 ```bash
 curl -X POST http://localhost:8000/ingest/system ^
-  -H "X-Internal-Api-Key: internal-secret"
+  -H "X-Internal-Api-Key: internal-secret" ^
+  -F "files=@data_RAG/system/interview_rubric_swe4.md" ^
+  -F "files=@data_RAG/system/question_bank_behavioral.json"
 ```
+
+**Postman:** Body → form-data → key `files` (type File).
 
 ---
 
@@ -67,8 +73,12 @@ curl -X POST http://localhost:8000/ingest/system ^
 
 ```bash
 curl -X POST http://localhost:8000/ingest/hr/hr_alice ^
-  -H "X-Internal-Api-Key: internal-secret"
+  -H "X-Internal-Api-Key: internal-secret" ^
+  -F "files=@data_RAG/hr/hr_alice/jd_backend_senior.md" ^
+  -F "files=@data_RAG/hr/hr_alice/policy_interview_process.md"
 ```
+
+File gốc lưu tại `data_RAG/hr/{owner_id}/`. Upload lại cùng tên file = cập nhật chunk file đó.
 
 ---
 
@@ -94,7 +104,35 @@ curl -X POST http://localhost:8000/chat ^
 
 ---
 
-## J. Generate questions
+## J. Generate plan + questions (luồng chính)
+
+```bash
+# 1. Bắt đầu lập plan từ JD
+curl -X POST http://localhost:8000/generate-plan ^
+  -H "Content-Type: application/json" ^
+  -H "X-Internal-Api-Key: internal-secret" ^
+  -d "{\"action\":\"start\",\"owner_id\":\"hr_alice\",\"session_id\":\"sess_001\",\"chat_history\":[]}"
+
+# 2. HR trả lời clarify (lặp đến khi phase=plan_proposed)
+curl -X POST http://localhost:8000/generate-plan ^
+  -H "Content-Type: application/json" ^
+  -H "X-Internal-Api-Key: internal-secret" ^
+  -d "{\"action\":\"message\",\"owner_id\":\"hr_alice\",\"session_id\":\"sess_001\",\"message\":\"5 câu, technical và behavioral, tập trung payments\",\"chat_history\":[]}"
+
+# 3. Xác nhận plan
+curl -X POST http://localhost:8000/generate-plan ^
+  -H "Content-Type: application/json" ^
+  -H "X-Internal-Api-Key: internal-secret" ^
+  -d "{\"action\":\"confirm\",\"owner_id\":\"hr_alice\",\"session_id\":\"sess_001\",\"plan_draft\":{\"owner_id\":\"hr_alice\",\"role\":\"Backend Engineer\",\"level\":\"SWE4\",\"question_count\":5,\"question_types\":[\"technical\",\"behavioral\"],\"topics\":[\"payments\"],\"summary\":\"Plan PV\"},\"chat_history\":[]}"
+
+# 4. Sinh câu hỏi
+curl -X POST http://localhost:8000/generate-questions ^
+  -H "Content-Type: application/json" ^
+  -H "X-Internal-Api-Key: internal-secret" ^
+  -d "{\"confirmed_plan\":{\"owner_id\":\"hr_alice\",\"role\":\"Backend Engineer\",\"level\":\"SWE4\",\"question_count\":5,\"question_types\":[\"technical\",\"behavioral\"],\"topics\":[\"payments\"],\"summary\":\"Plan PV\"}}"
+```
+
+**One-shot (legacy):**
 
 ```bash
 curl -X POST http://localhost:8000/generate-questions ^
@@ -102,6 +140,8 @@ curl -X POST http://localhost:8000/generate-questions ^
   -H "X-Internal-Api-Key: internal-secret" ^
   -d "{\"owner_id\":\"hr_alice\",\"role\":\"Backend Engineer\",\"level\":\"SWE4\",\"question_count\":5,\"question_types\":[\"technical\",\"behavioral\"],\"extra_context\":\"git, system design\"}"
 ```
+
+**JD validate:** ingest HR từ chối file quá ngắn/dài hoặc thiếu vai trò/yêu cầu (`JD_MIN_CHARS`, `JD_MAX_CHARS`, ...).
 
 ---
 
@@ -142,8 +182,9 @@ Backend gọi RAG với header `X-Internal-Api-Key`. RAG service **không** lưu
 | GET | `/health` | Không | Health check + Ollama ping |
 | GET | `/status` | API key | Chunk counts + indexed files |
 | POST | `/chat` | API key | RAG chat |
-| POST | `/generate-questions` | API key | Sinh câu hỏi phỏng vấn |
-| POST | `/ingest/system` | API key | Index system KB |
-| POST | `/ingest/hr/{owner_id}` | API key | Index HR KB theo owner |
+| POST | `/generate-plan` | API key | Lập plan PV (start / message / confirm) |
+| POST | `/generate-questions` | API key | Sinh câu hỏi (dùng `confirmed_plan` hoặc one-shot) |
+| POST | `/ingest/system` | API key | Upload file multipart (`files`) → index system KB (incremental) |
+| POST | `/ingest/hr/{owner_id}` | API key | Upload file multipart (`files`) → index HR KB theo owner (incremental) |
 
 Auth header: `X-Internal-Api-Key: {INTERNAL_API_KEY}` (bỏ qua nếu `INTERNAL_API_KEY` rỗng).

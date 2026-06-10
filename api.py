@@ -1,12 +1,13 @@
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from openai import OpenAI
 
 from config import CONFIG
-from models.schemas import ChatRequest, GenerateQuestionsRequest
+from models.schemas import ChatRequest, GeneratePlanRequest, GenerateQuestionsRequest
 from services.ingestion import DocumentIngestionService
 from services.interview_generator import InterviewQuestionService
+from services.interview_plan import InterviewPlanService
 from services.rag_chat import RagChatService
 from services.vector_store import ChromaVectorStore
 
@@ -19,6 +20,7 @@ vector_store = ChromaVectorStore(
 ingestion_service = DocumentIngestionService(vector_store, client, CONFIG)
 rag_service = RagChatService(vector_store, client, CONFIG)
 interview_service = InterviewQuestionService(vector_store, client, CONFIG)
+plan_service = InterviewPlanService(vector_store, ingestion_service, client, CONFIG)
 
 app = FastAPI(title="IQGS RAG Service")
 
@@ -71,17 +73,44 @@ def chat(request: ChatRequest):
     return response.to_json_dict()
 
 
-@app.post("/generate-questions", dependencies=[Depends(verify_internal_api_key)])
-def generate_questions(request: GenerateQuestionsRequest):
-    response = interview_service.generate(request)
+@app.post("/generate-plan", dependencies=[Depends(verify_internal_api_key)])
+def generate_plan(request: GeneratePlanRequest):
+    response = plan_service.handle(request)
     return response.to_json_dict()
 
 
+@app.post("/generate-questions", dependencies=[Depends(verify_internal_api_key)])
+def generate_questions(request: GenerateQuestionsRequest):
+    if request.confirmed_plan:
+        response = interview_service.generate_from_plan(request.confirmed_plan)
+    else:
+        response = interview_service.generate(request)
+    return response.to_json_dict()
+
+
+async def _read_uploads(files: List[UploadFile]) -> list[tuple[str, bytes]]:
+    uploads: list[tuple[str, bytes]] = []
+    for upload in files:
+        content = await upload.read()
+        uploads.append((upload.filename or "", content))
+    return uploads
+
+
 @app.post("/ingest/system", dependencies=[Depends(verify_internal_api_key)])
-def ingest_system():
-    return ingestion_service.ingest_system()
+async def ingest_system(files: List[UploadFile] = File(...)):
+    if not files:
+        raise HTTPException(status_code=400, detail="Cần ít nhất một file trong field 'files'")
+    uploads = await _read_uploads(files)
+    return ingestion_service.ingest_uploaded_files("system", uploads).to_json_dict()
 
 
 @app.post("/ingest/hr/{owner_id}", dependencies=[Depends(verify_internal_api_key)])
-def ingest_hr(owner_id: str):
-    return ingestion_service.ingest_hr(owner_id)
+async def ingest_hr(owner_id: str, files: List[UploadFile] = File(...)):
+    if not owner_id or not owner_id.strip():
+        raise HTTPException(status_code=400, detail="owner_id không hợp lệ")
+    if not files:
+        raise HTTPException(status_code=400, detail="Cần ít nhất một file trong field 'files'")
+    uploads = await _read_uploads(files)
+    return ingestion_service.ingest_uploaded_files(
+        "hr", uploads, owner_id=owner_id.strip()
+    ).to_json_dict()

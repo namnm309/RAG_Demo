@@ -38,28 +38,33 @@ python main.py
 
 **nhớ lệnh**
 - `ingest-system` — nạp folder system (xóa system cũ rồi index lại)
-- `ingest-hr hr_alice` — nạp JD alice, không đụng bob/system
+- `ingest-hr hr_alice` — nạp JD alice (có validate độ dài + nội dung)
 - `status` — xem có chunk chưa
-- `generate` — ra JSON câu hỏi ← **cái chính**
+- `generate-plan` — JD → clarify → plan → xác nhận HR → sinh câu hỏi ← **luồng chính**
+- `generate` — sinh một bước (dev/test)
 - `owner:hr_alice | ...` — chat thử
 
 thêm/sửa file → ingest lại
 
 ---
 
-**generate cho đúng**
-1. ingest-system (+ ingest-hr nếu cần JD)
-2. `generate` → nhập owner, role, level
-3. **chủ đề** (vd `git`) — không nhập thì hay chỉ lấy rubric SWE4
-4. cuối có JSON: `citations`, `sample_answer`
+**generate-plan cho đúng**
+1. `ingest-system` + `ingest-hr <owner_id>` (JD phải đủ dài, có vai trò + yêu cầu)
+2. `generate-plan` → hệ thống hỏi clarify nếu thiếu thông tin
+3. xác nhận plan (`y` hoặc `edit`)
+4. nhận JSON câu hỏi: `citations`, `sample_answer`
 
-⚠ chat ≠ generate. muốn bộ câu hỏi → `generate`, đừng chat "tạo câu hỏi git"
+API: `POST /generate-plan` (action: `start` | `message` | `confirm`) rồi `POST /generate-questions` với `confirmed_plan`.
+
+⚠ chat ≠ generate. muốn bộ câu hỏi → `generate-plan`, đừng chat "tạo câu hỏi git"
 
 ---
 
 **dính lỗi**
 - 0 chunk → file sai folder (phải trong `system/` hoặc `hr/<id>/`)
-- không thấy pro git → ingest-system + generate + chủ đề `git`
+- JD bị reject khi ingest → xem `validation_errors`; chỉnh `JD_MIN_CHARS` / `JD_MAX_CHARS` trong `.env` nếu cần
+- `phase=jd_invalid` khi generate-plan → upload lại JD đạt chuẩn
+- không thấy pro git → ingest-system + generate-plan + chủ đề trong plan
 - hr không có jd → `ingest-hr` + owner_id trùng tên folder
 - retrieve ít → hạ `min_score` config (0.2)
 

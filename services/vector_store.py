@@ -75,6 +75,23 @@ class ChromaVectorStore:
         result = col.query(**kwargs)
         return self._parse_query_result(result, collection, min_score)
 
+    def delete_by_source_file(
+        self,
+        collection: CollectionName,
+        source_file: str,
+        owner_id: Optional[str] = None,
+    ) -> int:
+        col = self._collection_for(collection)
+        clauses = [{"source_file": source_file}]
+        if collection == "hr" and owner_id:
+            clauses.append({"owner_id": owner_id})
+        where = clauses[0] if len(clauses) == 1 else {"$and": clauses}
+        existing = col.get(where=where, include=[])
+        ids = existing.get("ids") or []
+        if ids:
+            col.delete(ids=ids)
+        return len(ids)
+
     def delete_scoped(self, collection: CollectionName, owner_id: Optional[str] = None) -> int:
         if collection == "system":
             before = self._system.count()
@@ -93,6 +110,12 @@ class ChromaVectorStore:
         self._client.delete_collection(self._hr_name)
         self._hr = self._get_or_create_collection(self._hr_name)
         return before
+
+    def count_for_owner(self, owner_id: str) -> int:
+        if not owner_id:
+            return 0
+        data = self._hr.get(where={"owner_id": owner_id}, include=[])
+        return len(data.get("ids") or [])
 
     def indexed_files(self, collection: CollectionName, owner_id: Optional[str] = None) -> List[str]:
         col = self._collection_for(collection)
