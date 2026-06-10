@@ -1,0 +1,14 @@
+services:
+  rag-service:
+    build: .
+    container_name: iqgs-rag-service
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./data_RAG:/app/data_RAG
+      - ./chroma_db:/app/chroma_db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

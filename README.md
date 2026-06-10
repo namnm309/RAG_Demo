@@ -1,7 +1,21 @@
 # note — Interview RAG
 
-RAG + Ollama + Chroma → sinh câu hỏi PV có **trích dẫn doc** + **đáp án mẫu**.  
-`python main.py` (console thôi, chưa web)
+RAG + Ollama + Chroma → sinh câu hỏi PV có **trích dẫn doc** + **đáp án mẫu**.
+
+---
+
+## Ba cách chạy
+
+| Mode | Command |
+|------|---------|
+| Console dev/test | `python main.py` |
+| FastAPI local | `.\run-local.ps1` hoặc `python -m uvicorn api:app --host 0.0.0.0 --port 8000` |
+| Docker trên PC | `docker compose up -d --build` (cần Docker Desktop) |
+
+Chạy local không Docker: [DEPLOYMENT_LOCAL.md](DEPLOYMENT_LOCAL.md).  
+Deploy Docker + Cloudflare Tunnel: [DEPLOYMENT_PC.md](DEPLOYMENT_PC.md).
+
+Config qua `.env` (copy từ `.env.example`). Không commit `.env` thật.
 
 ---
 
@@ -15,10 +29,10 @@ RAG + Ollama + Chroma → sinh câu hỏi PV có **trích dẫn doc** + **đáp 
 ```bash
 pip install -r requirements.txt
 ollama pull nomic-embed-text
-ollama pull gemma4:31b-cloud
+ollama pull gemma4b:cloud
 python main.py
 ```
-→ bật Ollama. sửa model ở `config.py` nếu cần
+→ bật Ollama. sửa model trong `.env` hoặc `config.py` defaults nếu cần
 
 ---
 

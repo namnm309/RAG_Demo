@@ -31,25 +31,6 @@ Trả lời chính xác câu hỏi của người dùng chỉ dựa trên nội 
 - Nếu các đoạn mâu thuẫn nhau, nêu rõ mâu thuẫn và dẫn nguồn tương ứng.
 - Không đề cập đến độ liên quan hoặc score trong câu trả lời."""
 
-_MAX_HISTORY_MESSAGES = 6
-_MAX_HISTORY_CONTENT_LEN = 1000
-
-
-def _format_chat_history(chat_history: List[ChatMessage]) -> str:
-    valid = [
-        msg
-        for msg in chat_history
-        if msg.role in ("user", "assistant") and msg.content.strip()
-    ]
-    recent = valid[-_MAX_HISTORY_MESSAGES:]
-    lines = []
-    for msg in recent:
-        content = msg.content.strip()
-        if len(content) > _MAX_HISTORY_CONTENT_LEN:
-            content = content[:_MAX_HISTORY_CONTENT_LEN]
-        lines.append(f"{msg.role}: {content}")
-    return "\n".join(lines)
-
 
 class RagChatService:
     def __init__(self, vector_store: ChromaVectorStore, client: OpenAI, config: dict):
@@ -57,9 +38,35 @@ class RagChatService:
         self._client = client
         self._config = config
 
+    def _format_chat_history(self, chat_history: List[ChatMessage]) -> str:
+        max_msgs = self._config.get("max_history_messages", 6)
+        max_chars = self._config.get("max_history_message_chars", 1000)
+        valid = [
+            msg
+            for msg in chat_history
+            if msg.role in ("user", "assistant") and msg.content.strip()
+        ]
+        recent = valid[-max_msgs:]
+        lines = []
+        for msg in recent:
+            content = msg.content.strip()
+            if len(content) > max_chars:
+                content = content[:max_chars]
+            lines.append(f"{msg.role}: {content}")
+        return "\n".join(lines)
+
     def ask(self, request: ChatRequest) -> ChatResponse:
+        if not request.question or not request.question.strip():
+            return ChatResponse(
+                answer="Câu hỏi không được để trống.",
+                conversation_id=request.conversation_id,
+            )
+
         if not self._store.is_ready:
-            return ChatResponse(answer="Chưa có dữ liệu. Dùng ingest-system hoặc ingest-hr trước.")
+            return ChatResponse(
+                answer="Chưa có dữ liệu. Dùng ingest-system hoặc ingest-hr trước.",
+                conversation_id=request.conversation_id,
+            )
 
         start = time.time()
         top_k = request.top_k if request.top_k > 0 else self._config.get("top_k", 5)
@@ -92,6 +99,7 @@ class RagChatService:
             return ChatResponse(
                 answer="Không tìm thấy thông tin liên quan trong tài liệu.",
                 processing_time_ms=(time.time() - start) * 1000,
+                conversation_id=request.conversation_id,
             )
 
         context_parts = ["[NGỮ CẢNH]"]
@@ -102,7 +110,7 @@ class RagChatService:
             )
         context = "\n\n".join(context_parts)
 
-        history_text = _format_chat_history(request.chat_history)
+        history_text = self._format_chat_history(request.chat_history)
         if history_text:
             user_message = (
                 f"[LỊCH SỬ HỘI THOẠI]\n{history_text}\n[HẾT LỊCH SỬ HỘI THOẠI]\n\n"
@@ -113,7 +121,7 @@ class RagChatService:
             user_message = f"{context}\n[HẾT NGỮ CẢNH]\n\n[CÂU HỎI]\n{request.question}"
 
         stream = self._client.chat.completions.create(
-            model=self._config.get("chat_model", "gemma4:31b-cloud"),
+            model=self._config.get("chat_model", "gemma4b:cloud"),
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
@@ -144,4 +152,5 @@ class RagChatService:
             sources=sources,
             chunks_used=len(chunks),
             processing_time_ms=(time.time() - start) * 1000,
+            conversation_id=request.conversation_id,
         )

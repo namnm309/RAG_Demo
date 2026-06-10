@@ -60,6 +60,26 @@ class ChatResponse:
     sources: List[SourceReference] = field(default_factory=list)
     chunks_used: int = 0
     processing_time_ms: float = 0.0
+    conversation_id: Optional[str] = None
+
+    def to_json_dict(self) -> Dict[str, Any]:
+        return {
+            "answer": self.answer,
+            "conversation_id": self.conversation_id,
+            "sources": [
+                {
+                    "file_name": s.file_name,
+                    "chunk_index": s.chunk_index,
+                    "score": s.score,
+                    "knowledge_base": s.knowledge_base,
+                    "doc_type": s.doc_type,
+                    "text_preview": s.text_preview,
+                }
+                for s in self.sources
+            ],
+            "chunks_used": self.chunks_used,
+            "processing_time_ms": self.processing_time_ms,
+        }
 
 
 @dataclass
