@@ -30,7 +30,7 @@ def _ingest_json_response(envelope: ApiResponse[IngestData]) -> JSONResponse:
 @router.post(
     "/system/files",
     response_model=ApiResponse[IngestData],
-    summary="Upload system knowledge files",
+    summary="nạp file tài liệu",
     dependencies=[Depends(verify_api_key)],
 )
 async def ingest_system(files: List[UploadFile] = File(...)):
@@ -51,7 +51,7 @@ async def ingest_system(files: List[UploadFile] = File(...)):
 @router.post(
     "/hr/{owner_id}/files",
     response_model=ApiResponse[IngestData],
-    summary="Upload HR JD files",
+    summary="nạp file HR JD",
     dependencies=[Depends(verify_api_key)],
 )
 async def ingest_hr(owner_id: str, files: List[UploadFile] = File(...)):

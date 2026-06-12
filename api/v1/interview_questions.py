@@ -13,7 +13,7 @@ router = APIRouter(tags=["Interview Questions"])
 @router.post(
     "/interview-questions",
     response_model=ApiResponse[QuestionsData],
-    summary="Generate interview questions",
+    summary="Tạo câu hỏi phỏng vấn",
     dependencies=[Depends(verify_api_key)],
 )
 def generate_questions(body: GenerateQuestionsRequestBody):

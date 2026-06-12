@@ -30,7 +30,7 @@ def _plan_json_response(envelope: ApiResponse[PlanData]) -> JSONResponse:
 @router.post(
     "/start",
     response_model=ApiResponse[PlanData],
-    summary="Start interview plan from JD",
+    summary="Bắt đầu kế hoạch phỏng vấn từ JD",
     dependencies=[Depends(verify_api_key)],
 )
 def plan_start(body: PlanStartRequestBody):
@@ -41,7 +41,7 @@ def plan_start(body: PlanStartRequestBody):
 @router.post(
     "/messages",
     response_model=ApiResponse[PlanData],
-    summary="Reply to plan clarifying questions",
+    summary="Trả lời câu hỏi làm rõ kế hoạch",
     dependencies=[Depends(verify_api_key)],
 )
 def plan_message(body: PlanMessageRequestBody):
@@ -52,7 +52,7 @@ def plan_message(body: PlanMessageRequestBody):
 @router.post(
     "/confirm",
     response_model=ApiResponse[PlanData],
-    summary="Confirm interview plan",
+    summary="Xác nhận kế hoạch phỏng vấn",
     dependencies=[Depends(verify_api_key)],
 )
 def plan_confirm(body: PlanConfirmRequestBody):

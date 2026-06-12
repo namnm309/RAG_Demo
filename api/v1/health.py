@@ -13,8 +13,8 @@ router = APIRouter(tags=["Health"])
 @router.get(
     "/health",
     response_model=ApiResponse[HealthData],
-    summary="Health check",
-    description="Kiểm tra Ollama và số chunk trong ChromaDB. Không yêu cầu API key.",
+    summary="Check thông tin rag ",
+    description="Kiểm tra Ollama và số chunk trong ChromaDB",
 )
 def health():
     services = get_services()
@@ -46,7 +46,7 @@ def health():
 @router.get(
     "/status",
     response_model=ApiResponse[StatusData],
-    summary="Index status",
+    summary="Xem các file đã nạp ",
     dependencies=[Depends(verify_api_key)],
 )
 def status():
